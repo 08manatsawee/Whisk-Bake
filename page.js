@@ -1,0 +1,482 @@
+"use client";
+
+import { useState } from "react";
+import { supabase } from "@/lib/supabaseClient";
+
+// ---- style tokens: matcha green / cream, big readable text for staff ----
+const COLORS = {
+  matcha: "#5b7a4f",
+  matchaDark: "#3f5a37",
+  matchaLight: "#e7efe1",
+  cream: "#faf6ec",
+  text: "#2d2a20",
+  warnBg: "#fff3e0",
+  warnBorder: "#f59e0b",
+  warnText: "#8a4b00",
+  dangerBg: "#fde8e8",
+  dangerBorder: "#ef4444",
+  dangerText: "#9f1c1c",
+};
+
+function minutesSince(createdAt) {
+  const created = new Date(createdAt).getTime();
+  const now = Date.now();
+  const diffMs = Math.max(0, now - created);
+  return Math.floor(diffMs / 60000);
+}
+
+export default function GenerateQrPage() {
+  const [tableNumber, setTableNumber] = useState("");
+  const [customerCount, setCustomerCount] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+
+  // existing open session found for this table number
+  const [existingSession, setExistingSession] = useState(null);
+  // confirm-close dialog open/closed
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [confirmLoading, setConfirmLoading] = useState(false);
+
+  // result after a new session is created
+  const [qrResult, setQrResult] = useState(null);
+  const [copied, setCopied] = useState(false);
+
+  function resetResultState() {
+    setQrResult(null);
+    setExistingSession(null);
+    setShowConfirm(false);
+    setErrorMsg("");
+  }
+
+  async function handleOpenTable(e) {
+    e.preventDefault();
+    setErrorMsg("");
+    setCopied(false);
+
+    const tableNum = Number(tableNumber);
+    const custCount = Number(customerCount);
+
+    if (!tableNumber || Number.isNaN(tableNum) || tableNum <= 0) {
+      setErrorMsg("กรุณากรอกเลขโต๊ะให้ถูกต้อง");
+      return;
+    }
+    if (!customerCount || Number.isNaN(custCount) || custCount <= 0) {
+      setErrorMsg("กรุณากรอกจำนวนลูกค้าให้ถูกต้อง");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // 1) check for an existing open session on this table
+      const { data: existing, error: findError } = await supabase
+        .from("sessions")
+        .select("id, table_number, customer_count, created_at")
+        .eq("table_number", tableNum)
+        .eq("status", "open")
+        .maybeSingle();
+
+      if (findError) throw findError;
+
+      if (existing) {
+        // there's already an open session -> show warning box instead of creating new
+        setExistingSession(existing);
+        setQrResult(null);
+        setLoading(false);
+        return;
+      }
+
+      // 2) no open session -> insert a new one
+      const { data: inserted, error: insertError } = await supabase
+        .from("sessions")
+        .insert({
+          table_number: tableNum,
+          customer_count: custCount,
+          status: "open",
+        })
+        .select("id, table_number, customer_count, created_at")
+        .single();
+
+      if (insertError) throw insertError;
+
+      const orderUrl = `${window.location.origin}/order/${inserted.table_number}`;
+      setQrResult({
+        tableNumber: inserted.table_number,
+        customerCount: inserted.customer_count,
+        url: orderUrl,
+      });
+      setExistingSession(null);
+    } catch (err) {
+      setErrorMsg(
+        `เกิดข้อผิดพลาด: ${err?.message || "ไม่สามารถเปิดโต๊ะได้ กรุณาลองใหม่"}`
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function handleAskCloseOld() {
+    setShowConfirm(true);
+  }
+
+  function handleCancelConfirm() {
+    setShowConfirm(false);
+  }
+
+  async function handleConfirmCloseOld() {
+    if (!existingSession) return;
+    setConfirmLoading(true);
+    setErrorMsg("");
+    try {
+      // only close if it's still open, to guard against double-close races
+      const { data, error } = await supabase
+        .from("sessions")
+        .update({ status: "closed" })
+        .eq("id", existingSession.id)
+        .eq("status", "open")
+        .select("id");
+
+      if (error) throw error;
+
+      if (!data || data.length === 0) {
+        // someone else already closed/changed it — refresh state and let staff retry
+        setErrorMsg(
+          "ออเดอร์เดิมถูกปิดไปแล้ว หรือสถานะเปลี่ยนไป กรุณากดเปิดโต๊ะอีกครั้ง"
+        );
+        setShowConfirm(false);
+        setExistingSession(null);
+        return;
+      }
+
+      // success: close confirm dialog + warning box, keep form values,
+      // staff needs to press "เปิดโต๊ะ" again to create the new session
+      setShowConfirm(false);
+      setExistingSession(null);
+    } catch (err) {
+      setErrorMsg(
+        `ปิดโต๊ะเดิมไม่สำเร็จ: ${err?.message || "กรุณาลองใหม่"}`
+      );
+    } finally {
+      setConfirmLoading(false);
+    }
+  }
+
+  async function handleCopyLink() {
+    if (!qrResult) return;
+    try {
+      await navigator.clipboard.writeText(qrResult.url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setErrorMsg("คัดลอกลิงก์ไม่สำเร็จ กรุณาคัดลอกด้วยตนเอง");
+    }
+  }
+
+  const qrImgSrc = qrResult
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
+        qrResult.url
+      )}`
+    : null;
+
+  return (
+    <main
+      style={{
+        minHeight: "100vh",
+        background: COLORS.cream,
+        color: COLORS.text,
+        fontFamily: "system-ui, sans-serif",
+        padding: "2rem 1.25rem",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+      }}
+    >
+      <div style={{ width: "100%", maxWidth: "480px" }}>
+        <h1
+          style={{
+            fontSize: "2rem",
+            fontWeight: 800,
+            color: COLORS.matchaDark,
+            marginBottom: "0.25rem",
+            textAlign: "center",
+          }}
+        >
+          🍵 เปิดโต๊ะ — Whisk & Bake
+        </h1>
+        <p
+          style={{
+            textAlign: "center",
+            color: COLORS.matcha,
+            marginTop: 0,
+            marginBottom: "1.75rem",
+            fontSize: "1.05rem",
+          }}
+        >
+          สำหรับพนักงานหน้าร้าน
+        </p>
+
+        {/* ---- form ---- */}
+        <form
+          onSubmit={handleOpenTable}
+          style={{
+            background: "#fff",
+            border: `2px solid ${COLORS.matchaLight}`,
+            borderRadius: "16px",
+            padding: "1.5rem",
+            display: "flex",
+            flexDirection: "column",
+            gap: "1.1rem",
+            boxShadow: "0 2px 10px rgba(0,0,0,0.04)",
+          }}
+        >
+          <label style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+            <span style={{ fontSize: "1.1rem", fontWeight: 700 }}>เลขโต๊ะ</span>
+            <input
+              type="number"
+              inputMode="numeric"
+              min="1"
+              value={tableNumber}
+              onChange={(e) => setTableNumber(e.target.value)}
+              placeholder="เช่น 3"
+              style={inputStyle}
+            />
+          </label>
+
+          <label style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+            <span style={{ fontSize: "1.1rem", fontWeight: 700 }}>จำนวนลูกค้า</span>
+            <input
+              type="number"
+              inputMode="numeric"
+              min="1"
+              value={customerCount}
+              onChange={(e) => setCustomerCount(e.target.value)}
+              placeholder="เช่น 2"
+              style={inputStyle}
+            />
+          </label>
+
+          <button
+            type="submit"
+            disabled={loading}
+            style={{
+              marginTop: "0.5rem",
+              padding: "0.9rem",
+              fontSize: "1.15rem",
+              fontWeight: 800,
+              color: "#fff",
+              background: loading ? "#9db38f" : COLORS.matcha,
+              border: "none",
+              borderRadius: "12px",
+              cursor: loading ? "default" : "pointer",
+            }}
+          >
+            {loading ? "กำลังตรวจสอบ..." : "เปิดโต๊ะ"}
+          </button>
+
+          {errorMsg && (
+            <p style={{ color: COLORS.dangerText, fontWeight: 600, margin: 0 }}>
+              {errorMsg}
+            </p>
+          )}
+        </form>
+
+        {/* ---- warning box: existing open session ---- */}
+        {existingSession && !showConfirm && (
+          <div
+            style={{
+              marginTop: "1.5rem",
+              background: COLORS.warnBg,
+              border: `2px solid ${COLORS.warnBorder}`,
+              borderRadius: "16px",
+              padding: "1.25rem",
+            }}
+          >
+            <p
+              style={{
+                margin: 0,
+                fontSize: "1.1rem",
+                fontWeight: 700,
+                color: COLORS.warnText,
+              }}
+            >
+              ⚠️ โต๊ะนี้กำลังมีลูกค้าใช้บริการอยู่ กรุณาปิดออเดอร์เดิมก่อนเปิดโต๊ะใหม่
+            </p>
+            <button
+              onClick={handleAskCloseOld}
+              style={{
+                marginTop: "1rem",
+                padding: "0.75rem 1rem",
+                fontSize: "1rem",
+                fontWeight: 700,
+                color: "#fff",
+                background: COLORS.warnBorder,
+                border: "none",
+                borderRadius: "10px",
+                cursor: "pointer",
+              }}
+            >
+              ปิดออเดอร์เดิม
+            </button>
+          </div>
+        )}
+
+        {/* ---- confirm dialog ---- */}
+        {existingSession && showConfirm && (
+          <div
+            style={{
+              marginTop: "1.5rem",
+              background: COLORS.dangerBg,
+              border: `2px solid ${COLORS.dangerBorder}`,
+              borderRadius: "16px",
+              padding: "1.25rem",
+            }}
+          >
+            <p
+              style={{
+                margin: 0,
+                fontSize: "1.15rem",
+                fontWeight: 800,
+                color: COLORS.dangerText,
+              }}
+            >
+              ยืนยันปิดโต๊ะเดิม?
+            </p>
+            <ul style={{ marginTop: "0.75rem", paddingLeft: "1.2rem", lineHeight: 1.7 }}>
+              <li>
+                เลขโต๊ะ: <strong>{existingSession.table_number}</strong>
+              </li>
+              <li>
+                จำนวนลูกค้า: <strong>{existingSession.customer_count} ท่าน</strong>
+              </li>
+              <li>
+                เปิดโต๊ะมาแล้ว{" "}
+                <strong>{minutesSince(existingSession.created_at)} นาที</strong>
+              </li>
+            </ul>
+
+            <div style={{ display: "flex", gap: "0.75rem", marginTop: "1rem" }}>
+              <button
+                onClick={handleCancelConfirm}
+                disabled={confirmLoading}
+                style={{
+                  flex: 1,
+                  padding: "0.8rem",
+                  fontSize: "1rem",
+                  fontWeight: 700,
+                  color: COLORS.text,
+                  background: "#fff",
+                  border: `2px solid ${COLORS.dangerBorder}`,
+                  borderRadius: "10px",
+                  cursor: confirmLoading ? "default" : "pointer",
+                }}
+              >
+                ยกเลิก
+              </button>
+              <button
+                onClick={handleConfirmCloseOld}
+                disabled={confirmLoading}
+                style={{
+                  flex: 1,
+                  padding: "0.8rem",
+                  fontSize: "1rem",
+                  fontWeight: 700,
+                  color: "#fff",
+                  background: COLORS.dangerBorder,
+                  border: "none",
+                  borderRadius: "10px",
+                  cursor: confirmLoading ? "default" : "pointer",
+                }}
+              >
+                {confirmLoading ? "กำลังปิด..." : "ยืนยันปิดโต๊ะเดิม"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ---- QR result ---- */}
+        {qrResult && (
+          <div
+            style={{
+              marginTop: "1.5rem",
+              background: "#fff",
+              border: `2px solid ${COLORS.matchaLight}`,
+              borderRadius: "16px",
+              padding: "1.5rem",
+              textAlign: "center",
+            }}
+          >
+            <img
+              src={qrImgSrc}
+              alt={`QR code สำหรับโต๊ะ ${qrResult.tableNumber}`}
+              width={240}
+              height={240}
+              style={{ margin: "0 auto", display: "block" }}
+            />
+            <p
+              style={{
+                fontSize: "1.2rem",
+                fontWeight: 800,
+                color: COLORS.matchaDark,
+                marginTop: "1rem",
+                marginBottom: "0.4rem",
+              }}
+            >
+              โต๊ะ {qrResult.tableNumber} - {qrResult.customerCount} ท่าน
+            </p>
+            <p
+              style={{
+                fontSize: "0.95rem",
+                color: COLORS.text,
+                wordBreak: "break-all",
+                marginBottom: "0.75rem",
+              }}
+            >
+              {qrResult.url}
+            </p>
+            <button
+              onClick={handleCopyLink}
+              style={{
+                padding: "0.5rem 1rem",
+                fontSize: "0.95rem",
+                fontWeight: 700,
+                color: COLORS.matchaDark,
+                background: COLORS.matchaLight,
+                border: `1px solid ${COLORS.matcha}`,
+                borderRadius: "8px",
+                cursor: "pointer",
+              }}
+            >
+              {copied ? "คัดลอกแล้ว ✓" : "คัดลอกลิงก์"}
+            </button>
+
+            <div>
+              <button
+                onClick={resetResultState}
+                style={{
+                  marginTop: "1.25rem",
+                  padding: "0.6rem 1rem",
+                  fontSize: "0.95rem",
+                  fontWeight: 600,
+                  color: COLORS.matcha,
+                  background: "transparent",
+                  border: "none",
+                  cursor: "pointer",
+                  textDecoration: "underline",
+                }}
+              >
+                เปิดโต๊ะอื่นต่อ
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </main>
+  );
+}
+
+const inputStyle = {
+  fontSize: "1.15rem",
+  padding: "0.75rem 0.9rem",
+  borderRadius: "10px",
+  border: `2px solid ${COLORS.matchaLight}`,
+  outline: "none",
+};
