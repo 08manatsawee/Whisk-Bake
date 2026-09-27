@@ -18,7 +18,7 @@ const COLORS = {
   dangerText: "#9f1c1c",
 };
 
-function minutesSince(createdAt) {
+export default function MenuOrderingScreen() {
   const created = new Date(createdAt).getTime();
   const now = Date.now();
   const diffMs = Math.max(0, now - created);
