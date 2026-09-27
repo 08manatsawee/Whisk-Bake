@@ -138,4 +138,4 @@ whisk-and-bake/
 ├── package.json
 ├── .env.local.example
 └── .gitignore
-``` 
+```  
