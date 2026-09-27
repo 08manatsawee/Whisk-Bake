@@ -1,0 +1,108 @@
+'use client';
+
+import { useState } from "react";
+
+const COLORS = {
+  matcha: "#5b7a4f",
+  matchaDark: "#3f5a37",
+  cream: "#faf6ec",
+  text: "#2d2a20",
+};
+
+export default function Home() {
+  const [tableNumber, setTableNumber] = useState("");
+  const [customerCount, setCustomerCount] = useState("");
+
+  return (
+    <main
+      style={{
+        minHeight: "100vh",
+        background: COLORS.cream,
+        color: COLORS.text,
+        fontFamily: "system-ui, sans-serif",
+        padding: "2rem 1.25rem",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+      }}
+    >
+      <div style={{ width: "100%", maxWidth: "480px" }}>
+        <h1
+          style={{
+            fontSize: "2rem",
+            fontWeight: 800,
+            color: COLORS.matchaDark,
+            marginBottom: "0.25rem",
+            textAlign: "center",
+          }}
+        >
+          เปิดโต๊ะ - Whisk & Bake
+        </h1>
+        <p style={{ textAlign: "center", color: "#666", marginBottom: "2rem" }}>
+          กรอกเลขโต๊ะเพื่อสร้างเซสชันสั่งอาหาร
+        </p>
+
+        <div
+          style={{
+            background: "#fff",
+            padding: "1.5rem",
+            borderRadius: "12px",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.05)",
+          }}
+        >
+          <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 600 }}>
+            หมายเลขโต๊ะ (Table Number)
+          </label>
+          <input
+            type="text"
+            value={tableNumber}
+            onChange={(e) => setTableNumber(e.target.value)}
+            placeholder="เช่น 1, 2, A1"
+            style={{
+              width: "100%",
+              padding: "0.75rem",
+              borderRadius: "8px",
+              border: "1px solid #ccc",
+              marginBottom: "1rem",
+              fontSize: "1rem",
+            }}
+          />
+
+          <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: 600 }}>
+            จำนวนลูกค้า (Customer Count)
+          </label>
+          <input
+            type="number"
+            value={customerCount}
+            onChange={(e) => setCustomerCount(e.target.value)}
+            placeholder="เช่น 2"
+            style={{
+              width: "100%",
+              padding: "0.75rem",
+              borderRadius: "8px",
+              border: "1px solid #ccc",
+              marginBottom: "1.5rem",
+              fontSize: "1rem",
+            }}
+          />
+
+          <button
+            style={{
+              width: "100%",
+              padding: "0.85rem",
+              background: COLORS.matcha,
+              color: "#fff",
+              border: "none",
+              borderRadius: "8px",
+              fontSize: "1rem",
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            สร้าง QR Code
+          </button>
+        </div>
+      </div>
+    </main>
+  );
+}
