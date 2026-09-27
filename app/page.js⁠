@@ -18,14 +18,14 @@ const COLORS = {
   dangerText: "#9f1c1c",
 };
 
-export default function MenuOrderingScreen() {
+function MenuOrderingScreen() {
   const created = new Date(createdAt).getTime();
   const now = Date.now();
   const diffMs = Math.max(0, now - created);
   return Math.floor(diffMs / 60000);
 }
 
-export function GenerateQrPage() {
+export default function GenerateQrPage() {
   const [tableNumber, setTableNumber] = useState("");
   const [customerCount, setCustomerCount] = useState("");
   const [loading, setLoading] = useState(false);
