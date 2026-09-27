@@ -1,12 +1,12 @@
 export const metadata = {
-  title: "Whisk & Bake",
-  description: "Matcha cafe ordering system",
-};
+  title: 'Whisk & Bake',
+  description: 'Whisk & Bake Application',
+}
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
-      <body>{children}</body>
+    <html lang="th">
+      <body style={{ margin: 0, padding: 0 }}>{children}</body>
     </html>
-  );
+  )
 }
