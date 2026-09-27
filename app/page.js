@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { supabase } from "../lib/supabaseClient";
 
 // ---- style tokens: matcha green / cream, big readable text for staff ----
 const COLORS = {
