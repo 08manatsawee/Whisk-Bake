@@ -25,7 +25,7 @@ export default function MenuOrderingScreen() {
   return Math.floor(diffMs / 60000);
 }
 
-export default function GenerateQrPage() {
+export function GenerateQrPage() {
   const [tableNumber, setTableNumber] = useState("");
   const [customerCount, setCustomerCount] = useState("");
   const [loading, setLoading] = useState(false);
