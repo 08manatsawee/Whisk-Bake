@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { use } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { supabase } from "../../supabaseClient";
 
 // ---- matcha cafe color tokens ----
 const COLORS = {
